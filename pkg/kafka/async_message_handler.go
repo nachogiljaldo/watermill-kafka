@@ -62,37 +62,50 @@ func (h asyncMessageHandler) processMessage(
 		return nil
 	}
 
-ResendLoop:
-	for {
-		select {
-		case <-msg.Acked():
-			if sess != nil {
-				sess.MarkMessage(kafkaMsg, "")
-			}
-			h.logger.Trace("Message Acked", receivedMsgLogFields)
-			break ResendLoop
-		case <-msg.Nacked():
-			// FIXME: handle out of order ACKs / NACKs
-			if sess != nil {
-				sess.ResetOffset(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, "")
-			}
-			h.logger.Info("Message Nacked", receivedMsgLogFields)
+	go func() {
+	ResendLoop:
+		for {
+			select {
+			case <-msg.Acked():
+				if sess != nil {
+					sess.MarkMessage(kafkaMsg, "")
+				}
+				h.logger.Trace("Message Acked", receivedMsgLogFields)
+				break ResendLoop
+			case <-msg.Nacked():
+				// FIXME: handle out of order ACKs
+				if sess != nil {
+					sess.ResetOffset(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, "")
+				}
+				h.logger.Info("Message Nacked", receivedMsgLogFields)
 
-			// reset acks, etc.
-			msg = msg.Copy()
-			if h.nackResendSleep != NoSleep {
-				time.Sleep(h.nackResendSleep)
-			}
+				// reset acks, etc.
+				msg = msg.Copy()
+				if h.nackResendSleep != NoSleep {
+					time.Sleep(h.nackResendSleep)
+				}
 
-			continue ResendLoop
-		case <-h.closing:
-			h.logger.Trace("Closing, message discarded before ack", receivedMsgLogFields)
-			return nil
-		case <-ctx.Done():
-			h.logger.Trace("Closing, ctx cancelled before ack", receivedMsgLogFields)
-			return nil
+				select {
+				case h.outputChannel <- msg:
+					h.logger.Trace("Message sent to consumer", receivedMsgLogFields)
+				case <-h.closing:
+					h.logger.Trace("Closing, message discarded", receivedMsgLogFields)
+					return
+				case <-ctx.Done():
+					h.logger.Trace("Closing, ctx cancelled before sent to consumer", receivedMsgLogFields)
+					return
+				}
+
+				continue ResendLoop
+			case <-h.closing:
+				h.logger.Trace("Closing, message discarded before ack", receivedMsgLogFields)
+				return
+			case <-ctx.Done():
+				h.logger.Trace("Closing, ctx cancelled before ack", receivedMsgLogFields)
+				return
+			}
 		}
-	}
+	}()
 
 	return nil
 }
