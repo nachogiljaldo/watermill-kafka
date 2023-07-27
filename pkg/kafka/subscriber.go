@@ -85,6 +85,10 @@ type SubscriberConfig struct {
 	// Tracer is used to trace Kafka messages.
 	// If nil, then no tracing will be used.
 	Tracer SaramaTracer
+
+	// If true, the subscriber will send events to the output channel
+	// even if the previous ones have not be ACKed
+	AsyncConsumer bool
 }
 
 // NoSleep can be set to SubscriberConfig.NackResendSleep and SubscriberConfig.ReconnectRetrySleep.
@@ -427,7 +431,7 @@ func (s *Subscriber) consumeWithoutConsumerGroups(
 func (s *Subscriber) consumePartition(
 	ctx context.Context,
 	partitionConsumer sarama.PartitionConsumer,
-	messageHandler messageHandler,
+	messageHandler mHandler,
 	partitionConsumersWg *sync.WaitGroup,
 	logFields watermill.LogFields,
 ) {
@@ -463,8 +467,17 @@ func (s *Subscriber) consumePartition(
 	}
 }
 
-func (s *Subscriber) createMessagesHandler(output chan *message.Message) messageHandler {
-	return messageHandler{
+func (s *Subscriber) createMessagesHandler(output chan *message.Message) mHandler {
+	if s.config.AsyncConsumer {
+		return asyncMessageHandler{
+			outputChannel:   output,
+			unmarshaler:     s.config.Unmarshaler,
+			nackResendSleep: s.config.NackResendSleep,
+			logger:          s.logger,
+			closing:         s.closing,
+		}
+	}
+	return syncMessageHandler{
 		outputChannel:   output,
 		unmarshaler:     s.config.Unmarshaler,
 		nackResendSleep: s.config.NackResendSleep,
@@ -489,7 +502,7 @@ func (s *Subscriber) Close() error {
 
 type consumerGroupHandler struct {
 	ctx              context.Context
-	messageHandler   messageHandler
+	messageHandler   mHandler
 	logger           watermill.LoggerAdapter
 	closing          chan struct{}
 	messageLogFields watermill.LogFields
@@ -526,87 +539,13 @@ func (h consumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cla
 	return nil
 }
 
-type messageHandler struct {
-	outputChannel chan<- *message.Message
-	unmarshaler   Unmarshaler
-
-	nackResendSleep time.Duration
-
-	logger  watermill.LoggerAdapter
-	closing chan struct{}
-}
-
-func (h messageHandler) processMessage(
-	ctx context.Context,
-	kafkaMsg *sarama.ConsumerMessage,
-	sess sarama.ConsumerGroupSession,
-	messageLogFields watermill.LogFields,
-) error {
-	receivedMsgLogFields := messageLogFields.Add(watermill.LogFields{
-		"kafka_partition_offset": kafkaMsg.Offset,
-		"kafka_partition":        kafkaMsg.Partition,
-	})
-
-	h.logger.Trace("Received message from Kafka", receivedMsgLogFields)
-
-	ctx = setPartitionToCtx(ctx, kafkaMsg.Partition)
-	ctx = setPartitionOffsetToCtx(ctx, kafkaMsg.Offset)
-	ctx = setMessageTimestampToCtx(ctx, kafkaMsg.Timestamp)
-
-	msg, err := h.unmarshaler.Unmarshal(kafkaMsg)
-	if err != nil {
-		// resend will make no sense, stopping consumerGroupHandler
-		return errors.Wrap(err, "message unmarshal failed")
-	}
-
-	ctx, cancelCtx := context.WithCancel(ctx)
-	msg.SetContext(ctx)
-	defer cancelCtx()
-
-	receivedMsgLogFields = receivedMsgLogFields.Add(watermill.LogFields{
-		"message_uuid": msg.UUID,
-	})
-
-ResendLoop:
-	for {
-		select {
-		case h.outputChannel <- msg:
-			h.logger.Trace("Message sent to consumer", receivedMsgLogFields)
-		case <-h.closing:
-			h.logger.Trace("Closing, message discarded", receivedMsgLogFields)
-			return nil
-		case <-ctx.Done():
-			h.logger.Trace("Closing, ctx cancelled before sent to consumer", receivedMsgLogFields)
-			return nil
-		}
-
-		select {
-		case <-msg.Acked():
-			if sess != nil {
-				sess.MarkMessage(kafkaMsg, "")
-			}
-			h.logger.Trace("Message Acked", receivedMsgLogFields)
-			break ResendLoop
-		case <-msg.Nacked():
-			h.logger.Trace("Message Nacked", receivedMsgLogFields)
-
-			// reset acks, etc.
-			msg = msg.Copy()
-			if h.nackResendSleep != NoSleep {
-				time.Sleep(h.nackResendSleep)
-			}
-
-			continue ResendLoop
-		case <-h.closing:
-			h.logger.Trace("Closing, message discarded before ack", receivedMsgLogFields)
-			return nil
-		case <-ctx.Done():
-			h.logger.Trace("Closing, ctx cancelled before ack", receivedMsgLogFields)
-			return nil
-		}
-	}
-
-	return nil
+type mHandler interface {
+	processMessage(
+		ctx context.Context,
+		kafkaMsg *sarama.ConsumerMessage,
+		sess sarama.ConsumerGroupSession,
+		messageLogFields watermill.LogFields,
+	) error
 }
 
 func (s *Subscriber) SubscribeInitialize(topic string) (err error) {
