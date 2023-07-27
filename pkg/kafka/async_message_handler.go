@@ -45,7 +45,6 @@ func (h asyncMessageHandler) processMessage(
 
 	ctx, cancelCtx := context.WithCancel(ctx)
 	msg.SetContext(ctx)
-	defer cancelCtx()
 
 	receivedMsgLogFields = receivedMsgLogFields.Add(watermill.LogFields{
 		"message_uuid": msg.UUID,
@@ -55,14 +54,17 @@ func (h asyncMessageHandler) processMessage(
 	case h.outputChannel <- msg:
 		h.logger.Trace("Message sent to consumer", receivedMsgLogFields)
 	case <-h.closing:
+		cancelCtx()
 		h.logger.Trace("Closing, message discarded", receivedMsgLogFields)
 		return nil
 	case <-ctx.Done():
+		cancelCtx()
 		h.logger.Trace("Closing, ctx cancelled before sent to consumer", receivedMsgLogFields)
 		return nil
 	}
 
 	go func() {
+		defer cancelCtx()
 	ResendLoop:
 		for {
 			select {
