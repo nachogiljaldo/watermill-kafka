@@ -48,7 +48,7 @@ func NewBatchedMessageHandler(
 		messageParser: messageParser{
 			unmarshaler: unmarshaler,
 		},
-		messages: make(chan *messageHolder, 0),
+		messages: make(chan *messageHolder),
 	}
 	go handler.startProcessing()
 	return handler
@@ -73,7 +73,6 @@ func (h *batchedMessageHandler) startProcessing() {
 				h.logger.Trace("Timer expired, sending already fetched messages.", logFields)
 			}
 			timerExpired = true
-			break
 		case <-h.closing:
 			h.logger.Debug("Subscriber is closing, stopping messageHandler", logFields)
 			return

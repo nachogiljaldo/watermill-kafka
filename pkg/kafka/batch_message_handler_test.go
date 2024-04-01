@@ -433,7 +433,7 @@ func testSameMessagesAndLocalOrder(t testing.TB, receivedMessages []*message.Mes
 				assertSameMessage(t, msg, consumerMessages[idx])
 			}
 		} else {
-			t.Fatal(fmt.Sprintf("No messages for partition: %d", partition))
+			t.Fatalf("No messages for partition: %d", partition)
 			t.Fail()
 		}
 	}
