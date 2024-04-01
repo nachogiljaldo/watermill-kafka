@@ -388,7 +388,7 @@ func consumerGroupSession(testConfig testConfig) (sarama.ConsumerGroupSession, *
 
 func generateMessage(topic string, partition, offset int) *sarama.ConsumerMessage {
 	return &sarama.ConsumerMessage{
-		Topic:          "topic",
+		Topic:          topic,
 		Partition:      int32(partition),
 		Key:            []byte(fmt.Sprintf("key%d", offset)),
 		Value:          []byte(fmt.Sprintf("some-value-%d", offset)),
