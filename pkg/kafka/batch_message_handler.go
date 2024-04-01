@@ -95,7 +95,7 @@ func (h *batchedMessageHandler) startProcessing() {
 				time.Sleep(h.nackResendSleep)
 			}
 		}
-		timer.Reset(sendDeadline.Sub(time.Now()))
+		timer.Reset(time.Until(sendDeadline))
 	}
 }
 
