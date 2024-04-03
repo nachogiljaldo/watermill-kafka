@@ -67,7 +67,7 @@ func TestPartitionConcurrentMessageHandler(t *testing.T) {
 
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 9 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 9 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 9)
 					for currentMessage := 0; currentMessage < messagesPerPartition; currentMessage++ {
 						for currentPartition := 0; currentPartition < partitions; currentPartition++ {
@@ -121,7 +121,7 @@ func TestPartitionConcurrentMessageHandler(t *testing.T) {
 				assert.Len(t, receivedMessages, len(messagesToSend)+1)
 				testSameMessagesAndLocalOrder(t, receivedMessages[1:], messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 9 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 9 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 9)
 					for currentMessage := 0; currentMessage < messagesPerPartition; currentMessage++ {
 						for currentPartition := 0; currentPartition < partitions; currentPartition++ {
@@ -161,7 +161,7 @@ func TestPartitionConcurrentMessageHandler(t *testing.T) {
 				assert.Len(t, receivedMessages, len(messagesToSend)+1)
 				testSameMessagesAndLocalOrder(t, receivedMessages[1:], messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 1 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 1 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 1)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 				}

@@ -63,7 +63,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				}
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 3 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 3 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 3)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[1], "")
@@ -104,7 +104,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				}
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 3 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 3 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 3)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[1], "")
@@ -149,7 +149,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				}
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 3 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 3 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 3)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[1], "")
@@ -197,7 +197,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				receivedMessages[1].Ack()
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend[2:])
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 2 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 2 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 2)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[1], "")
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[3], "")
@@ -239,7 +239,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				receivedMessages[1].Ack()
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend[1:])
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 2 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 2 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 2)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[2], "")
@@ -273,7 +273,7 @@ func TestBatchMessageHandler(t *testing.T) {
 				receivedMessages[0].Ack()
 				testSameMessagesAndLocalOrder(t, receivedMessages, messagesToSend)
 				if sess != nil {
-					assert.Eventually(t, func() bool { return len(mock.Calls) == 1 }, 1*time.Second, 10*time.Millisecond)
+					assert.Eventually(t, func() bool { return len(filterMockCalls(mock, "MarkMessage")) == 1 }, 1*time.Second, 10*time.Millisecond)
 					mock.AssertNumberOfCalls(t, "MarkMessage", 1)
 					mock.AssertCalled(t, "MarkMessage", messagesToSend[0], "")
 				}
@@ -294,6 +294,16 @@ func TestBatchMessageHandler(t *testing.T) {
 			close(closing)
 		})
 	}
+}
+
+func filterMockCalls(currentMock *mock.Mock, method string) []mock.Call {
+	result := make([]mock.Call, 0)
+	for _, call := range currentMock.Calls {
+		if call.Method == method {
+			result = append(result, call)
+		}
+	}
+	return result
 }
 
 type mockConsumerGroupSession struct {
@@ -383,6 +393,7 @@ func consumerGroupSession(testConfig testConfig) (sarama.ConsumerGroupSession, *
 			sess = &mockConsumerGroupSessionNoCalls{}
 		}
 	}
+	consumerGroupSession.On("Context").Return(context.Background())
 	return sess, &consumerGroupSession.Mock
 }
 

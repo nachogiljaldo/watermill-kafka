@@ -104,6 +104,10 @@ func (h *batchedMessageHandler) ProcessMessages(
 	sess sarama.ConsumerGroupSession,
 	logFields watermill.LogFields,
 ) error {
+	var sessionContextDone <-chan struct{}
+	if sess != nil {
+		sessionContextDone = sess.Context().Done()
+	}
 	for {
 		select {
 		case kafkaMsg := <-kafkaMessages:
@@ -121,6 +125,9 @@ func (h *batchedMessageHandler) ProcessMessages(
 			return nil
 		case <-ctx.Done():
 			h.logger.Debug("Ctx was cancelled, stopping messageHandler", logFields)
+			return nil
+		case <-sessionContextDone:
+			h.logger.Debug("Session ctx was cancelled, stopping messageHandler", logFields)
 			return nil
 		}
 	}
