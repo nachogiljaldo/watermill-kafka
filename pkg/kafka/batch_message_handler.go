@@ -167,7 +167,7 @@ func (h *batchedMessageHandler) processBatch(
 		msgHolder := buffer[idx]
 		h.logger.Trace("Waiting for message to be acked", msgHolder.logFields)
 		ack, ok := <-waitChannel
-		h.logger.Info("Received ACK / NACK response or closed", msgHolder.logFields)
+		h.logger.Debug("Received ACK / NACK response or closed", msgHolder.logFields)
 		// it was aborted
 		if !ok {
 			h.logger.Info("Returning as messages were closed", msgHolder.logFields)
